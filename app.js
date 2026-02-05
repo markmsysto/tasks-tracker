@@ -203,13 +203,14 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(elements.lists).forEach(el => el.innerHTML = '');
 
         const sortedTasks = getSortedTasks();
-        const filter = elements.search.value.toLowerCase();
+        const filter = elements.search.value.toLowerCase().trim();
 
         sortedTasks.forEach(task => {
             const matchesSearch = !filter ||
-                task.title.toLowerCase().includes(filter) ||
-                task.desc.toLowerCase().includes(filter) ||
-                (task.category && task.category.toLowerCase().includes(filter));
+                (task.title && task.title.toLowerCase().includes(filter)) ||
+                (task.desc && task.desc.toLowerCase().includes(filter)) ||
+                (task.category && task.category.toLowerCase().includes(filter)) ||
+                (task.notes && task.notes.toLowerCase().includes(filter));
 
             if (!matchesSearch) {
                 return;
@@ -229,13 +230,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.listView.list.innerHTML = '';
         const sortedTasks = getSortedTasks();
-        const searchQuery = elements.search.value.toLowerCase();
+        const searchQuery = elements.search.value.toLowerCase().trim();
 
         const filtered = sortedTasks.filter(task => {
             const matchesSearch = !searchQuery ||
-                task.title.toLowerCase().includes(searchQuery) ||
-                task.desc.toLowerCase().includes(searchQuery) ||
-                (task.category && task.category.toLowerCase().includes(searchQuery));
+                (task.title && task.title.toLowerCase().includes(searchQuery)) ||
+                (task.desc && task.desc.toLowerCase().includes(searchQuery)) ||
+                (task.category && task.category.toLowerCase().includes(searchQuery)) ||
+                (task.notes && task.notes.toLowerCase().includes(searchQuery));
             if (!matchesSearch) return false;
 
             const today = new Date().toISOString().split('T')[0];
