@@ -136,7 +136,9 @@ document.addEventListener('DOMContentLoaded', () => {
             tasks = result.rows.map(row => {
                 const task = {};
                 result.cols.forEach((col, i) => {
-                    task[col.name] = row[i].value;
+                    const val = row[i];
+                    // Handle both direct values and wrapped objects {value: ...}
+                    task[col.name] = (val && typeof val === 'object' && 'value' in val) ? val.value : val;
                 });
                 // Fix types
                 task.id = parseInt(task.id);
@@ -144,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 task.attachments = parseInt(task.attachments) || 0;
                 return task;
             });
+            console.log("Loaded Tasks from Turso:", tasks);
             if (tasks.length === 0) {
                 await seedData();
             }
