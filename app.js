@@ -6,6 +6,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let viewMode = 'board'; // 'board' or 'list'
     let activeFilter = 'all';
 
+    const TURSO_URL = "https://systotaskmanager-systoadmin.aws-ap-northeast-1.turso.io";
+    const TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzAyNTY4MTQsImlkIjoiMGM3NjlhYTUtNTg2Mi00YzhhLWI2NGUtMDYyOTVkMzlkN2YwIiwicmlkIjoiNmY0ZGNkMjEtOWJiNS00ODYzLWIyOTYtZDhhMTc0Zjc1ZTg2In0.3cpyKulKom-5FrI6-TU2Ei8UsvjD6jPN0WMfNABXZkjKjTLf7ku1wqw8ryOjInICIByg5egYWk9CNP9EnL6ACg";
+
+    async function tursoExecute(sql, args = []) {
+        try {
+            const response = await fetch(`${TURSO_URL}/v2/pipeline`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${TURSO_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    requests: [
+                        { type: 'execute', stmt: { sql, args: args.map(a => typeof a === 'object' ? JSON.stringify(a) : { value: a?.toString() || "" }) } },
+                        { type: 'close' }
+                    ]
+                })
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            return data.results[0].response.result;
+        } catch (err) {
+            console.error("Turso Error:", err);
+            return null;
+        }
+    }
+
     // DOM Elements
     const elements = {
         auth: {
@@ -80,12 +107,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Data Management ---
-    function init() {
+    async function init() {
         const loggedInUser = localStorage.getItem('systo_kanban_user');
         if (loggedInUser) {
             currentUser = loggedInUser;
             showApp();
-            loadUserTasks();
+            await loadUserTasks();
         } else {
             showLogin();
         }
@@ -103,37 +130,57 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.user.avatar.textContent = currentUser.charAt(0).toUpperCase();
     }
 
-    function loadUserTasks() {
-        const stored = localStorage.getItem(`systo_kanban_tasks_${currentUser}`);
-        if (stored) {
-            tasks = JSON.parse(stored);
+    async function loadUserTasks() {
+        const result = await tursoExecute("SELECT * FROM tasks WHERE username = ?", [currentUser]);
+        if (result && result.rows) {
+            tasks = result.rows.map(row => {
+                const task = {};
+                result.cols.forEach((col, i) => {
+                    task[col.name] = row[i].value;
+                });
+                // Fix types
+                task.id = parseInt(task.id);
+                task.comments = parseInt(task.comments) || 0;
+                task.attachments = parseInt(task.attachments) || 0;
+                return task;
+            });
+            if (tasks.length === 0) {
+                await seedData();
+            }
         } else {
-            seedData();
+            await seedData();
         }
         renderBoard();
         updateStats();
     }
 
-    function seedData() {
+    async function seedData() {
         const currentYear = new Date().getFullYear();
-        tasks = [
+        const initialTasks = [
             { id: 1, title: 'Update API documentation', desc: 'Write comprehensive API documentation with examples and integration guides.', notes: 'Check the Confluence page for initial drafts.', status: 'todo', category: 'work', deadline: `${currentYear}-02-03`, comments: 2, attachments: 0 },
             { id: 2, title: 'Setup database migrations', desc: 'Create and test all database migration scripts for the new schema version.', notes: 'Ensure all scripts are idempotent.', status: 'todo', category: 'work', deadline: `${currentYear}-02-18`, comments: 1, attachments: 1 },
             { id: 3, title: 'Design responsive mobile UI', desc: 'Ensure all components are mobile-responsive and touch-friendly on small devices.', notes: '', status: 'todo', category: 'personal', deadline: `${currentYear}-02-20`, comments: 1, attachments: 0 },
-            // In Progress
             { id: 4, title: 'Design new dashboard layout', desc: 'Create mockups and wireframes for the new analytics dashboard.', notes: 'Get feedback from the UX team.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-15`, comments: 3, attachments: 2 },
             { id: 5, title: 'Implement authentication flow', desc: 'Add OAuth integration and secure password reset functionality.', notes: 'Use the latest security libraries.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-08`, comments: 5, attachments: 1 },
             { id: 6, title: 'Refactor authentication module', desc: 'Clean up legacy code and optimize the authentication module.', notes: '', status: 'inprogress', category: 'personal', deadline: `${currentYear}-02-12`, comments: 4, attachments: 0 },
-            // Completed
             { id: 7, title: 'Complete Q1 planning document', desc: 'Finalize roadmap and feature prioritization for the first quarter.', notes: 'Presented and approved on Jan 25.', status: 'completed', category: 'work', deadline: `${currentYear}-01-31`, comments: 6, attachments: 2 }
         ];
-        saveTasks();
+
+        for (const task of initialTasks) {
+            await saveTaskToTurso(task);
+        }
+        tasks = initialTasks;
     }
 
-    function saveTasks() {
-        if (currentUser) {
-            localStorage.setItem(`systo_kanban_tasks_${currentUser}`, JSON.stringify(tasks));
-        }
+    async function saveTaskToTurso(task) {
+        await tursoExecute(
+            "INSERT INTO tasks (id, username, title, desc, notes, status, category, deadline, comments, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, desc=excluded.desc, notes=excluded.notes, status=excluded.status, category=excluded.category, deadline=excluded.deadline, comments=excluded.comments, attachments=excluded.attachments",
+            [task.id, currentUser, task.title, task.desc, task.notes, task.status, task.category, task.deadline, task.comments, task.attachments]
+        );
+    }
+
+    async function saveTasks() {
+        // Individual tasks are saved during creation/move
         updateStats();
     }
 
@@ -343,18 +390,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    function deleteTask(id) {
+    async function deleteTask(id) {
         tasks = tasks.filter(t => t.id !== id);
-        saveTasks();
+        await tursoExecute("DELETE FROM tasks WHERE id = ?", [id]);
         renderBoard();
         updateStats();
     }
 
-    function updateTaskStatus(id, newStatus) {
+    async function updateTaskStatus(id, newStatus) {
         const task = tasks.find(t => t.id === id);
         if (task && task.status !== newStatus) {
             task.status = newStatus;
-            saveTasks();
+            await tursoExecute("UPDATE tasks SET status = ? WHERE id = ?", [newStatus, id]);
             renderBoard();
         }
     }
@@ -389,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.modal.backdrop.classList.remove('active');
     };
 
-    elements.modal.form.addEventListener('submit', (e) => {
+    elements.modal.form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const idVal = elements.modal.inputs.id.value;
@@ -412,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tasks.push(taskData);
         }
 
-        saveTasks();
+        await saveTaskToTurso(taskData);
         renderBoard();
         closeModal();
     });
@@ -433,14 +480,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Auth Handlers
-    elements.auth.form.addEventListener('submit', (e) => {
+    elements.auth.form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = elements.auth.username.value.trim();
         if (username) {
             currentUser = username;
+
+            // Check/Create user in Turso
+            const userExists = await tursoExecute("SELECT username FROM users WHERE username = ?", [username]);
+            if (!userExists || userExists.rows.length === 0) {
+                await tursoExecute("INSERT INTO users (username) VALUES (?)", [username]);
+            }
+
             localStorage.setItem('systo_kanban_user', currentUser);
             showApp();
-            loadUserTasks();
+            await loadUserTasks();
             elements.auth.username.value = '';
         }
     });
