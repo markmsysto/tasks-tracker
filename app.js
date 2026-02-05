@@ -206,7 +206,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const filter = elements.search.value.toLowerCase();
 
         sortedTasks.forEach(task => {
-            if (filter && !task.title.toLowerCase().includes(filter) && !task.desc.toLowerCase().includes(filter)) {
+            const matchesSearch = !filter ||
+                task.title.toLowerCase().includes(filter) ||
+                task.desc.toLowerCase().includes(filter) ||
+                (task.category && task.category.toLowerCase().includes(filter));
+
+            if (!matchesSearch) {
                 return;
             }
 
@@ -229,7 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const filtered = sortedTasks.filter(task => {
             const matchesSearch = !searchQuery ||
                 task.title.toLowerCase().includes(searchQuery) ||
-                task.desc.toLowerCase().includes(searchQuery);
+                task.desc.toLowerCase().includes(searchQuery) ||
+                (task.category && task.category.toLowerCase().includes(searchQuery));
             if (!matchesSearch) return false;
 
             const today = new Date().toISOString().split('T')[0];
