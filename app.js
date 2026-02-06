@@ -11,6 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function tursoExecute(sql, args = []) {
         try {
+            // Map arguments to the format Turso/libSQL expects for its JSON API
+            const formattedArgs = args.map(arg => {
+                if (arg === null) return { type: 'null' };
+                if (typeof arg === 'number') return { type: 'integer', value: arg.toString() };
+                if (typeof arg === 'boolean') return { type: 'integer', value: arg ? "1" : "0" };
+                return { type: 'text', value: arg.toString() };
+            });
+
             const response = await fetch(`${TURSO_URL}/v2/pipeline`, {
                 method: 'POST',
                 headers: {
@@ -19,18 +27,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify({
                     requests: [
-                        { type: 'execute', stmt: { sql, args: args.map(a => typeof a === 'object' ? JSON.stringify(a) : { value: a?.toString() || "" }) } },
+                        { type: 'execute', stmt: { sql, args: formattedArgs } },
                         { type: 'close' }
                     ]
                 })
             });
             const data = await response.json();
             if (data.error) throw new Error(data.error);
+            if (data.results && data.results[0].type === 'error') {
+                throw new Error(data.results[0].error.message);
+            }
             return data.results[0].response.result;
         } catch (err) {
             console.error("Turso Error:", err);
             return null;
         }
+    }
+
+    async function setupDatabase() {
+        console.log("Setting up database tables...");
+        await tursoExecute(`
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY
+            )
+        `);
+        await tursoExecute(`
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY,
+                username TEXT,
+                title TEXT,
+                "desc" TEXT,
+                notes TEXT,
+                status TEXT,
+                category TEXT,
+                deadline TEXT,
+                comments INTEGER DEFAULT 0,
+                attachments INTEGER DEFAULT 0
+            )
+        `);
     }
 
     // DOM Elements
@@ -94,6 +128,20 @@ document.addEventListener('DOMContentLoaded', () => {
             due: document.getElementById('card-filter-due'),
             overdue: document.getElementById('card-filter-overdue'),
             completed: document.getElementById('card-filter-completed')
+        },
+        categoryFilter: document.getElementById('category-filter-select'),
+        gauges: {
+            distribution: {
+                bar: document.getElementById('bar-distribution'),
+                workVal: document.getElementById('count-work'),
+                personalVal: document.getElementById('count-personal')
+            },
+            progress: {
+                bar: document.getElementById('bar-progress'),
+                percentText: document.getElementById('percent-progress'),
+                inprogressVal: document.getElementById('count-gauges-inprogress'),
+                completedVal: document.getElementById('count-gauges-completed')
+            }
         }
     };
 
@@ -108,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Data Management ---
     async function init() {
+        await setupDatabase();
         const loggedInUser = localStorage.getItem('systo_kanban_user');
         if (loggedInUser) {
             currentUser = loggedInUser;
@@ -159,14 +208,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function seedData() {
         const currentYear = new Date().getFullYear();
+        const timestamp = Date.now();
         const initialTasks = [
-            { id: 1, title: 'Update API documentation', desc: 'Write comprehensive API documentation with examples and integration guides.', notes: 'Check the Confluence page for initial drafts.', status: 'todo', category: 'work', deadline: `${currentYear}-02-03`, comments: 2, attachments: 0 },
-            { id: 2, title: 'Setup database migrations', desc: 'Create and test all database migration scripts for the new schema version.', notes: 'Ensure all scripts are idempotent.', status: 'todo', category: 'work', deadline: `${currentYear}-02-18`, comments: 1, attachments: 1 },
-            { id: 3, title: 'Design responsive mobile UI', desc: 'Ensure all components are mobile-responsive and touch-friendly on small devices.', notes: '', status: 'todo', category: 'personal', deadline: `${currentYear}-02-20`, comments: 1, attachments: 0 },
-            { id: 4, title: 'Design new dashboard layout', desc: 'Create mockups and wireframes for the new analytics dashboard.', notes: 'Get feedback from the UX team.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-15`, comments: 3, attachments: 2 },
-            { id: 5, title: 'Implement authentication flow', desc: 'Add OAuth integration and secure password reset functionality.', notes: 'Use the latest security libraries.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-08`, comments: 5, attachments: 1 },
-            { id: 6, title: 'Refactor authentication module', desc: 'Clean up legacy code and optimize the authentication module.', notes: '', status: 'inprogress', category: 'personal', deadline: `${currentYear}-02-12`, comments: 4, attachments: 0 },
-            { id: 7, title: 'Complete Q1 planning document', desc: 'Finalize roadmap and feature prioritization for the first quarter.', notes: 'Presented and approved on Jan 25.', status: 'completed', category: 'work', deadline: `${currentYear}-01-31`, comments: 6, attachments: 2 }
+            { id: timestamp + 1, title: 'Update API documentation', desc: 'Write comprehensive API documentation with examples and integration guides.', notes: 'Check the Confluence page for initial drafts.', status: 'todo', category: 'work', deadline: `${currentYear}-02-03`, comments: 2, attachments: 0 },
+            { id: timestamp + 2, title: 'Setup database migrations', desc: 'Create and test all database migration scripts for the new schema version.', notes: 'Ensure all scripts are idempotent.', status: 'todo', category: 'work', deadline: `${currentYear}-02-18`, comments: 1, attachments: 1 },
+            { id: timestamp + 3, title: 'Design responsive mobile UI', desc: 'Ensure all components are mobile-responsive and touch-friendly on small devices.', notes: '', status: 'todo', category: 'personal', deadline: `${currentYear}-02-20`, comments: 1, attachments: 0 },
+            { id: timestamp + 4, title: 'Design new dashboard layout', desc: 'Create mockups and wireframes for the new analytics dashboard.', notes: 'Get feedback from the UX team.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-15`, comments: 3, attachments: 2 },
+            { id: timestamp + 5, title: 'Implement authentication flow', desc: 'Add OAuth integration and secure password reset functionality.', notes: 'Use the latest security libraries.', status: 'inprogress', category: 'work', deadline: `${currentYear}-02-08`, comments: 5, attachments: 1 },
+            { id: timestamp + 6, title: 'Refactor authentication module', desc: 'Clean up legacy code and optimize the authentication module.', notes: '', status: 'inprogress', category: 'personal', deadline: `${currentYear}-02-12`, comments: 4, attachments: 0 },
+            { id: timestamp + 7, title: 'Complete Q1 planning document', desc: 'Finalize roadmap and feature prioritization for the first quarter.', notes: 'Presented and approved on Jan 25.', status: 'completed', category: 'work', deadline: `${currentYear}-01-31`, comments: 6, attachments: 2 }
         ];
 
         for (const task of initialTasks) {
@@ -177,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function saveTaskToTurso(task) {
         await tursoExecute(
-            "INSERT INTO tasks (id, username, title, desc, notes, status, category, deadline, comments, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, desc=excluded.desc, notes=excluded.notes, status=excluded.status, category=excluded.category, deadline=excluded.deadline, comments=excluded.comments, attachments=excluded.attachments",
+            "INSERT INTO tasks (id, username, title, \"desc\", notes, status, category, deadline, comments, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, title=excluded.title, \"desc\"=excluded.\"desc\", notes=excluded.notes, status=excluded.status, category=excluded.category, deadline=excluded.deadline, comments=excluded.comments, attachments=excluded.attachments",
             [task.id, currentUser, task.title, task.desc, task.notes, task.status, task.category, task.deadline, task.comments, task.attachments]
         );
     }
@@ -206,16 +256,18 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(elements.lists).forEach(el => el.innerHTML = '');
 
         const sortedTasks = getSortedTasks();
-        const filter = elements.search.value.toLowerCase().trim();
+        const searchFilter = elements.search.value.toLowerCase().trim();
+        const categoryFilter = elements.categoryFilter.value;
+        const matchesCategory = (task) => categoryFilter === 'all' || task.category === categoryFilter;
 
         sortedTasks.forEach(task => {
-            const matchesSearch = !filter ||
-                (task.title && task.title.toLowerCase().includes(filter)) ||
-                (task.desc && task.desc.toLowerCase().includes(filter)) ||
-                (task.category && task.category.toLowerCase().includes(filter)) ||
-                (task.notes && task.notes.toLowerCase().includes(filter));
+            const matchesSearch = !searchFilter ||
+                (task.title && task.title.toLowerCase().includes(searchFilter)) ||
+                (task.desc && task.desc.toLowerCase().includes(searchFilter)) ||
+                (task.category && task.category.toLowerCase().includes(searchFilter)) ||
+                (task.notes && task.notes.toLowerCase().includes(searchFilter));
 
-            if (!matchesSearch) {
+            if (!matchesSearch || !matchesCategory(task)) {
                 return;
             }
 
@@ -241,7 +293,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 (task.desc && task.desc.toLowerCase().includes(searchQuery)) ||
                 (task.category && task.category.toLowerCase().includes(searchQuery)) ||
                 (task.notes && task.notes.toLowerCase().includes(searchQuery));
-            if (!matchesSearch) return false;
+
+            const categoryFilter = elements.categoryFilter.value;
+            const matchesCategory = categoryFilter === 'all' || task.category === categoryFilter;
+
+            if (!matchesSearch || !matchesCategory) return false;
 
             const today = new Date().toISOString().split('T')[0];
             const now = new Date();
@@ -375,9 +431,40 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.counts.headerInProgress.textContent = counts.inprogress;
         elements.counts.headerCompleted.textContent = counts.completed;
 
-        // Update Overdue Overview Card
         const todoOverview = document.getElementById('count-header-todo-overview');
         if (todoOverview) todoOverview.textContent = counts.todo;
+
+        updateGauges();
+    }
+
+    function updateGauges() {
+        // Distribution (Work vs Personal) for To-Do and In Progress
+        const activeTasks = tasks.filter(t => t.status !== 'completed');
+        const workTasks = activeTasks.filter(t => t.category === 'work').length;
+        const personalTasks = activeTasks.filter(t => t.category === 'personal').length;
+        const totalActive = activeTasks.length;
+
+        const workPercent = totalActive > 0 ? Math.round((workTasks / totalActive) * 100) : 0;
+
+        elements.gauges.distribution.workVal.textContent = workTasks;
+        elements.gauges.distribution.personalVal.textContent = personalTasks;
+        elements.gauges.distribution.workVal.textContent = workTasks;
+        elements.gauges.distribution.personalVal.textContent = personalTasks;
+
+        // Progress (In Progress vs Completed)
+        const totalProgressTasks = tasks.filter(t => t.status === 'inprogress' || t.status === 'completed').length;
+        const completedTasks = tasks.filter(t => t.status === 'completed').length;
+        const inProgressTasks = tasks.filter(t => t.status === 'inprogress').length;
+
+        const progressPercent = totalProgressTasks > 0 ? Math.round((completedTasks / totalProgressTasks) * 100) : 0;
+
+        elements.gauges.progress.inprogressVal.textContent = inProgressTasks;
+        elements.gauges.progress.completedVal.textContent = completedTasks;
+        elements.gauges.progress.percentText.textContent = `${progressPercent}%`;
+
+        // Animate vertical sidebars
+        elements.gauges.distribution.bar.style.height = `${workPercent}%`;
+        elements.gauges.progress.bar.style.height = `${progressPercent}%`;
     }
 
     // --- Drag and Drop Global Handlers ---
@@ -403,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function deleteTask(id) {
         tasks = tasks.filter(t => t.id !== id);
-        await tursoExecute("DELETE FROM tasks WHERE id = ?", [id]);
+        await tursoExecute("DELETE FROM tasks WHERE id = ? AND username = ?", [id, currentUser]);
         renderBoard();
         updateStats();
     }
@@ -411,9 +498,18 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateTaskStatus(id, newStatus) {
         const task = tasks.find(t => t.id === id);
         if (task && task.status !== newStatus) {
+            const oldStatus = task.status;
             task.status = newStatus;
-            await tursoExecute("UPDATE tasks SET status = ? WHERE id = ?", [newStatus, id]);
+
+            // Optimistic UI update
             renderBoard();
+
+            const result = await tursoExecute("UPDATE tasks SET status = ? WHERE id = ? AND username = ?", [newStatus, id, currentUser]);
+            if (!result) {
+                console.error("Failed to update status in Turso");
+                task.status = oldStatus;
+                renderBoard();
+            }
         }
     }
 
@@ -487,6 +583,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Search Listener
     elements.search.addEventListener('input', () => {
+        renderBoard();
+    });
+
+    // Category Filter Listener
+    elements.categoryFilter.addEventListener('change', () => {
         renderBoard();
     });
 

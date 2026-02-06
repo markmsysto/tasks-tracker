@@ -13,6 +13,48 @@
 
 <body>
     <div class="app-container">
+        <!-- Left HUD Sidebar -->
+        <aside class="hud-sidebar left-sidebar">
+            <div class="scifi-vertical-bar-container">
+                <div class="scifi-bar-layout-group">
+                    <div class="scifi-bar-vertical-wrapper">
+                        <div class="scifi-bar-fill-vertical distribution-fill" id="bar-distribution"
+                            style="height: 0%;">
+                            <div class="bar-glow-vertical"></div>
+                        </div>
+                    </div>
+                    <div class="bar-info-vertical-side">
+                        <span class="bar-label-v">WORK vs PERSONAL</span>
+                    </div>
+                </div>
+                <div class="bar-stats-vertical">
+                    <div class="stat-item-v"><span id="count-work">0</span> WORK</div>
+                    <div class="stat-item-v"><span id="count-personal">0</span> PERSONAL</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right HUD Sidebar -->
+        <aside class="hud-sidebar right-sidebar">
+            <div class="scifi-vertical-bar-container">
+                <div class="scifi-bar-layout-group">
+                    <div class="bar-info-vertical-side">
+                        <span class="bar-label-v">PROGRESS STATUS</span>
+                        <span class="bar-percent-v" id="percent-progress">0%</span>
+                    </div>
+                    <div class="scifi-bar-vertical-wrapper">
+                        <div class="scifi-bar-fill-vertical progress-fill" id="bar-progress" style="height: 0%;">
+                            <div class="bar-glow-vertical"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bar-stats-vertical">
+                    <div class="stat-item-v"><span id="count-gauges-inprogress">0</span> IN PROGRESS</div>
+                    <div class="stat-item-v"><span id="count-gauges-completed">0</span> COMPLETED</div>
+                </div>
+            </div>
+        </aside>
+
         <!-- Header Section -->
         <header class="main-header">
             <div class="header-top">
@@ -52,6 +94,13 @@
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
                     <input type="text" id="search-input" placeholder="Search tasks, descriptions, assignees...">
+                </div>
+                <div class="category-filter">
+                    <select id="category-filter-select">
+                        <option value="all">All Categories</option>
+                        <option value="work">Work</option>
+                        <option value="personal">Personal</option>
+                    </select>
                 </div>
             </div>
 
